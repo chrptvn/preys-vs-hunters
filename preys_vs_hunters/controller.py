@@ -1,13 +1,18 @@
 from enum import Enum
+from typing import List
+
 import numpy as np
+import torch
 from matplotlib import pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.widgets import Button
+
+from ai.Brain import decide_movement
+from ai.HunterModel import HunterModel
 from preys_vs_hunters.display import GridDisplay
-from preys_vs_hunters.entities.entity import EntityType
+from preys_vs_hunters.entities.entity import EntityType, Movement, Entity
 from preys_vs_hunters.entities.pool import Pool
-from preys_vs_hunters.utils import get_local_observation, get_entities_at_location, \
-    get_entities_by_distance, calculate_distance_reward
+from preys_vs_hunters.utils import get_local_observation, get_entities_at_location
 
 
 class ActionType(Enum):
@@ -37,6 +42,12 @@ class PreysVsHunters:
         self._setup_events()
         self._setup_ui()
 
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.model = HunterModel()
+        self.model.load_state_dict(torch.load("C:\\Users\\cacpot\\projects\\perso\\preys-vs-hunters\\hunter.pt",
+                                         map_location=torch.device('cpu')))
+        self.model.eval()
+
     def _spawn(self, entity_type: EntityType, location: tuple[int, int]):
         self.entities_pool.add(entity_type, location)
         self.grid[location] = self.display.get_color_index(self.entities_pool.entities[-1].color)
@@ -47,36 +58,43 @@ class PreysVsHunters:
             self.grid[entity.location] = 0
             self.entities_pool.remove(entity_id)
 
-    def _move(self, entity_id: int, direction: tuple[int, int]):
-        # Find the entity by ID
-        entity = next((e for e in self.entities_pool.entities if e.id == entity_id), None)
-        if not entity:
-            return  # No such entity, do nothing
-
-        # Compute new location with toroidal wrapping
-        x_max, y_max = self.grid.shape
-        dx, dy = direction
-        new_x = (entity.location[0] + dx) % x_max
-        new_y = (entity.location[1] + dy) % y_max
-        old_location = entity.location
-        new_location = (new_x, new_y)
-
-        if entity.type is EntityType.HUNTER:
-            old_observation = get_local_observation(old_location, self.grid, self.entities_pool.entities)
-            new_observation = get_local_observation(new_location, self.grid, self.entities_pool.entities)
-            old_distances = get_entities_by_distance(old_observation, entity.id, [EntityType.PREY])
-            new_distances = get_entities_by_distance(new_observation, entity.id, [EntityType.PREY])
-            score = calculate_distance_reward(old_distances, new_distances)
-            print(f"Score for {entity.label} moving from {old_location} to {new_location}: {score}")
-
+    def _move_to(self, entity: Entity, movement: Movement):
         # Clear the old location on the grid
         self.grid[entity.location] = 0
+        # Get the new location
+        new_location = self._get_new_location(entity, movement)
 
         # Update the entity’s internal location
         entity.location = new_location
 
         # Paint the new location on the grid
         self.grid[new_location] = self.display.get_color_index(entity.color)
+
+    def _get_new_location(self, entity: Entity, movement: Movement):
+        direction = (0, 0)
+        if movement is Movement.UP:
+            direction = (-1, 0)
+        elif movement is Movement.DOWN:
+            direction = (1, 0)
+        elif movement is Movement.LEFT:
+            direction = (0, -1)
+        elif movement is Movement.RIGHT:
+            direction = (0, 1)
+        elif movement is Movement.UPPER_LEFT:
+            direction = (-1, -1)
+        elif movement is Movement.UPPER_RIGHT:
+            direction = (-1, 1)
+        elif movement is Movement.LOWER_LEFT:
+            direction = (1, -1)
+        elif movement is Movement.LOWER_RIGHT:
+            direction = (1, 1)
+
+        # Compute new location with toroidal wrapping
+        x_max, y_max = self.grid.shape
+        dx, dy = direction
+        new_x = (entity.location[0] + dx) % x_max
+        new_y = (entity.location[1] + dy) % y_max
+        return (new_x, new_y)
 
     def _run(self):
         plt.show()
@@ -147,15 +165,39 @@ class PreysVsHunters:
         elif action_type == ActionType.WATCH:
             self.spawn_type = None
 
+    def _is_blocked(self, entityType: EntityType, entities_at_location: List[Entity]):
+        if entityType is EntityType.HUNTER:
+            for entity in entities_at_location:
+                print(f"Entity {entity.id} blocked by {entity.type} at {entity.location}")
+                if entity.type is EntityType.WALL or entity.type is EntityType.HUNTER:
+                    return True
+                elif entity.type is EntityType.PREY:
+                    return False
+
+        return False
+
     def _update(self, _):
         if self.is_running:
 
             for entity in self.entities_pool.entities:
+                new_location = entity.location
+                best_move = None
+
                 if entity.type is EntityType.HUNTER:
-                    self._move(entity.id, (np.random.randint(-1, 2), np.random.randint(-1, 2)))
-                    # self._move(entity.id, (0,0))
+                    local_observation = get_local_observation(entity.location, self.grid, self.entities_pool.entities)
+                    best_move = decide_movement(entity.id, local_observation, self.model, self.device)
+
+                    new_location = self._get_new_location(entity, best_move)
+
+                    entities_at_new_location = get_entities_at_location(new_location, self.entities_pool.entities)
+
+                    if not self._is_blocked(entity.type, entities_at_new_location):
+                        self._move_to(entity, best_move)
+                        for entity_at_new_location in entities_at_new_location:
+                            self.entities_pool.entities.remove(entity_at_new_location)
+
                 elif entity.type is EntityType.PREY:
-                    # self._move(entity.id, (np.random.randint(-1, 2), np.random.randint(-1, 2)))
-                    self._move(entity.id, (0, 0))
+                    pass
+
 
         return self.display.update(self.grid)

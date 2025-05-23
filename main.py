@@ -1,4 +1,3 @@
-from game_of_life.controller import GameOfLife
 from preys_vs_hunters.controller import PreysVsHunters
 
 # -----------------------------------------------------------
@@ -12,7 +11,7 @@ from preys_vs_hunters.controller import PreysVsHunters
 
 if __name__ == '__main__':
     # Initialize the game with a 100x100 grid and 200ms update interval
-    game = PreysVsHunters(size=(50, 50), interval=50)
+    game = PreysVsHunters(size=(50, 50), interval=500)
 
     # Start the simulation
     game._run()
