@@ -2,13 +2,12 @@ from enum import Enum
 from typing import List
 
 import numpy as np
-import torch
 from matplotlib import pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.widgets import Button
 
-from ai.Brain import decide_movement
-from ai.HunterModel import HunterModel
+from ai.brain import decide_movement
+from ai.models import HunterModel
 from preys_vs_hunters.display import GridDisplay
 from preys_vs_hunters.entities.entity import EntityType, Movement, Entity
 from preys_vs_hunters.entities.pool import Pool
@@ -22,7 +21,7 @@ class ActionType(Enum):
 
 
 class PreysVsHunters:
-    def __init__(self, size=(100, 100), interval=200):
+    def __init__(self, hunter_model: HunterModel, device, size=(100, 100), interval=200):
         self.is_running = False
         self.spawn_type = None
         self.action = ActionType.WATCH
@@ -42,11 +41,8 @@ class PreysVsHunters:
         self._setup_events()
         self._setup_ui()
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = HunterModel()
-        self.model.load_state_dict(torch.load("C:\\Users\\cacpot\\projects\\perso\\preys-vs-hunters\\hunter.pt",
-                                         map_location=torch.device('cpu')))
-        self.model.eval()
+        self.device = device
+        self.hunter_model = hunter_model
 
     def _spawn(self, entity_type: EntityType, location: tuple[int, int]):
         self.entities_pool.add(entity_type, location)
@@ -185,7 +181,7 @@ class PreysVsHunters:
 
                 if entity.type is EntityType.HUNTER:
                     local_observation = get_local_observation(entity.location, self.grid, self.entities_pool.entities)
-                    best_move = decide_movement(entity.id, local_observation, self.model, self.device)
+                    best_move = decide_movement(entity.id, local_observation, self.hunter_model, self.device)
 
                     new_location = self._get_new_location(entity, best_move)
 

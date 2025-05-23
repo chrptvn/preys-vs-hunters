@@ -1,17 +1,16 @@
+import torch
+
+from ai.models import HunterModel
 from preys_vs_hunters.controller import PreysVsHunters
 
-# -----------------------------------------------------------
-# Entry point for Conway's Game of Life
-#
-# This script initializes the GameOfLife controller and
-# launches the simulation using Matplotlib for display.
-#
-# Grid size and animation interval can be adjusted as needed.
-# -----------------------------------------------------------
-
 if __name__ == '__main__':
-    # Initialize the game with a 100x100 grid and 200ms update interval
-    game = PreysVsHunters(size=(50, 50), interval=500)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    hunter_model = HunterModel()
+    hunter_model.load_state_dict(torch.load("hunter.pt", map_location=device))
+    hunter_model.eval()
+
+    game = PreysVsHunters(hunter_model=hunter_model, device=device, size=(50, 50), interval=500)
 
     # Start the simulation
     game._run()

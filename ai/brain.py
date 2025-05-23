@@ -3,7 +3,7 @@ from typing import List
 import torch
 from torch import nn
 
-from ai.EntityTensor import entities_to_tensor, movement_to_onehot
+from ai.observation import entities_to_tensor, movement_to_onehot
 from preys_vs_hunters.entities.entity import EntityType, Entity, Movement
 from preys_vs_hunters.utils import get_entities_by_distance
 
