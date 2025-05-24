@@ -59,4 +59,6 @@ if __name__ == '__main__':
 
         print(f"Epoch {epoch + 1}, Loss: {loss.item():.4f}")
 
-    torch.save(model.state_dict(), "hunter.pt")
+    torch.save({
+        "path_finder": model.state_dict()
+    }, "hunter.pt")

@@ -1,13 +1,15 @@
 from typing import List
 
 import torch
-from torch import nn
 
+from ai.models import Model
 from ai.observation import entities_to_tensor, movement_to_onehot
 from preys_vs_hunters.entities.entity import EntityType, Entity, Movement
 from preys_vs_hunters.utils import get_entities_by_distance
 
-def decide_movement(entity_id: int, entities: list, model: nn.Module, device) -> Movement:
+def decide_movement(entity_id: int, entities: list, model: Model, device) -> Movement:
+    model.load_checkpoint("path_finder")
+
     entity = next((e for e in entities if e.id == entity_id), None)
     # Build input grid
     grid_tensor = entities_to_tensor(entities, main_entity=entity, grid_size=11).unsqueeze(0).to(device)
@@ -26,16 +28,6 @@ def decide_movement(entity_id: int, entities: list, model: nn.Module, device) ->
     return best_move
 
 def compute_reward(hunter: Entity, prey_list: List[Entity], entities: List[Entity], movement: Movement) -> float:
-    """
-    Computes the reward for a hunter performing a movement,
-    based on change in distance to all preys.
-
-    :param hunter: The hunter entity (must support .move and .move_to).
-    :param prey_list: The list of prey entities (must be part of entities).
-    :param entities: All entities in the environment.
-    :param movement: The movement direction to test.
-    :return: A float representing the cumulative reward.
-    """
     # Save original position
     original_position = hunter.location
 
@@ -58,11 +50,11 @@ def compute_reward(hunter: Entity, prey_list: List[Entity], entities: List[Entit
     for prey_id, before_dist in before_dict.items():
         after_dist = after_dict.get(prey_id)
         if after_dist is not None:
-            reward += before_dist - after_dist
+            reward += (before_dist - after_dist) * (10 - after_dist)
 
     # Restore original positions (non-destructive simulation)
     hunter.move_to(original_position[0], original_position[1])
     for prey in prey_list:
         prey.move_to(prey_positions[prey.id][1], prey_positions[prey.id][0])
 
-    return reward * 10  # Scale reward for better learning
+    return reward
