@@ -102,4 +102,3 @@ def calculate_distance_reward(
             reward -= 0.5  # lost sight
 
     return reward
-

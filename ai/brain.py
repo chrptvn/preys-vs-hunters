@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict
 
 import torch
 
@@ -26,6 +26,46 @@ def decide_movement(entity_id: int, entities: list, model: Model, device) -> Mov
             best_reward = predicted_reward
             best_move = movement
     return best_move
+
+def calculate_target_selector_reward(
+    entity: Entity,
+    entities: List[Entity],
+    priorities: Dict[EntityType, int],
+    target: Entity
+) -> float:
+    """
+    Calculates a reward for selecting a given target entity.
+
+    The reward is based on:
+    - Distance to the target (closer is better)
+    - Priority assigned to the target's type
+
+    :param entity: The hunter (or agent) making the decision.
+    :param entities: All visible entities in the environment.
+    :param priorities: A mapping of EntityType to priority value.
+    :param target: The target entity being evaluated.
+    :return: A float reward value.
+    """
+    # Get all entities of interest by type
+    distances = get_entities_by_distance(entities, entity.id, list(priorities.keys()))
+
+    # Find the distance to the selected target
+    distance = next((dist for ent, dist in distances if ent.id == target.id), None)
+
+    if distance is not None:
+        priority = priorities.get(target.type, 0)
+
+        # Option 1: Inverse distance reward (simple & stable)
+        reward = (1 / (distance + 1)) * priority
+
+        # Optional: use exponential shaping for stronger preference to close targets
+        # reward = priority * math.exp(-distance)
+
+        return reward
+
+    # Target not visible or not relevant — penalize selection slightly
+    return -1.0
+
 
 def compute_reward(hunter: Entity, prey_list: List[Entity], entities: List[Entity], movement: Movement) -> float:
     # Save original position

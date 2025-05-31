@@ -9,7 +9,7 @@ class Pool:
     def add(self, type: EntityType, location: tuple[int, int]):
         id = self.next_id
         self.next_id += 1
-        if type == EntityType.HUNTER:
+        if type == EntityType.PREDATOR:
             from preys_vs_hunters.entities.hunter import Hunter
             entity = Hunter(id, location)
         elif type == EntityType.PREY:

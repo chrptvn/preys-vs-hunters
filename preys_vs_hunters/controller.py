@@ -122,7 +122,7 @@ class PreysVsHunters:
 
         ax_button_hunter = plt.axes((0.56, 0.01, 0.1, 0.05))
         self.button_hunter = Button(ax_button_hunter, 'Hunter')
-        self.button_hunter.on_clicked(lambda event: self._set_spawn_type(EntityType.HUNTER))
+        self.button_hunter.on_clicked(lambda event: self._set_spawn_type(EntityType.PREDATOR))
 
         ax_button_prey = plt.axes((0.44, 0.01, 0.1, 0.05))
         self.button_prey = Button(ax_button_prey, 'Prey')
@@ -162,10 +162,10 @@ class PreysVsHunters:
             self.spawn_type = None
 
     def _is_blocked(self, entityType: EntityType, entities_at_location: List[Entity]):
-        if entityType is EntityType.HUNTER:
+        if entityType is EntityType.PREDATOR:
             for entity in entities_at_location:
                 print(f"Entity {entity.id} blocked by {entity.type} at {entity.location}")
-                if entity.type is EntityType.WALL or entity.type is EntityType.HUNTER:
+                if entity.type is EntityType.WALL or entity.type is EntityType.PREDATOR:
                     return True
                 elif entity.type is EntityType.PREY:
                     return False
@@ -179,7 +179,7 @@ class PreysVsHunters:
                 new_location = entity.location
                 best_move = None
 
-                if entity.type is EntityType.HUNTER:
+                if entity.type is EntityType.PREDATOR:
                     local_observation = get_local_observation(entity.location, self.grid, self.entities_pool.entities)
                     best_move = decide_movement(entity.id, local_observation, self.hunter_model, self.device)
 

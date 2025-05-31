@@ -1,11 +1,7 @@
 from enum import Enum
+from typing import Optional
 
-
-class EntityType(Enum):
-    VOID = 0
-    HUNTER = 1
-    PREY = 2
-    WALL = 3
+from preys_vs_hunters.goal.Goal import Goal, GoalType
 
 
 class Movement(Enum):
@@ -18,6 +14,10 @@ class Movement(Enum):
     LEFT = 6
     UPPER_LEFT = 7
 
+class EntityType(Enum):
+    PREDATOR = 0
+    PREY = 1
+    WALL = 2
 
 class Entity:
     def __init__(self,
@@ -37,6 +37,8 @@ class Entity:
         else:
             self.eats = eats
         self.color = color
+        self.target: Optional[Entity] = None
+        self.goal = Goal(GoalType.STAY)
 
     def move_to(self, x: int, y: int):
         self.location = (x, y)
@@ -59,3 +61,6 @@ class Entity:
             self.move_to(x - 1, y)
         elif movement == Movement.UPPER_LEFT:
             self.move_to(x - 1, y - 1)
+
+    def set_goal(self, goal: Goal):
+        self.goal = goal
