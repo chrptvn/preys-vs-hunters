@@ -92,14 +92,14 @@ class HunterModel(nn.Module):
         )
 
 # --- TRAINING LOOP ---
-def train_model(model, dataloader, optimizer, device, num_epochs=5):
+def train_model(model, dataloader, optimizer, device, max_epoch=100000):
     model.train()
     loss_action_fn = nn.CrossEntropyLoss()
     loss_goal_fn = nn.CrossEntropyLoss()
     loss_target_fn = nn.CrossEntropyLoss()
     loss_move_fn = nn.MSELoss()
 
-    for epoch in range(num_epochs):
+    for epoch in range(max_epoch):
         total_loss = 0
         for batch in dataloader:
             batch = batch.to(device)
@@ -122,19 +122,15 @@ def train_model(model, dataloader, optimizer, device, num_epochs=5):
             loss.backward()
             optimizer.step()
 
-            if epoch % 1 == 0:  # Or only log every N steps if preferred
-                pred_action = out_action.argmax().item()
-                pred_goal = out_goal.argmax().item()
-                pred_target = out_target.argmax().item()
-
-                print(f"    Action → Predicted: {pred_action}, Expected: {y_action.item()}")
-                print(f"    Goal   → Predicted: {pred_goal}, Expected: {y_goal.item()}")
-                print(f"    Target → Predicted: {pred_target}, Expected: {y_target_id.item()}")
-                print(f"    Move   → Predicted: {out_move.tolist()}, Expected: {y_move.tolist()}")
-
             total_loss += loss.item()
 
-        print(f"[Epoch {epoch+1}] Loss: {total_loss / len(dataloader):.4f}")
+        loss = total_loss / len(dataloader)
+        print(f"[Epoch {epoch+1}] Loss: {loss:.4f}")
+
+        if epoch == max_epoch or loss < 0.01:
+            return model.state_dict()
+
+
 
 # --- RUN ---
 if __name__ == "__main__":
@@ -146,4 +142,7 @@ if __name__ == "__main__":
     model = HunterModel().to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-    train_model(model, loader, optimizer, device, num_epochs=200)
+    trained_model = train_model(model, loader, optimizer, device, max_epoch=100000)
+
+    torch.save(trained_model, "preys_vs_hunters.pt")
+    print("✅ Model saved as preys_vs_hunters.pt")
