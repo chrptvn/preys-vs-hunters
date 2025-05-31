@@ -128,7 +128,7 @@ def train_model(model, dataloader, optimizer, device, max_epoch=100000):
         print(f"[Epoch {epoch+1}] Loss: {loss:.4f}")
 
         if epoch == max_epoch or loss < 0.01:
-            return model.state_dict()
+            return model.module.state_dict()
 
 
 
@@ -140,9 +140,20 @@ if __name__ == "__main__":
     loader = DataLoader(dataset, batch_size=1, shuffle=True)
 
     model = HunterModel().to(device)
+    model = nn.DataParallel(model)
+
+    model_path = "preys_vs_hunters.pt"
+
+    if os.path.exists(model_path):
+        print("📦 Found existing model, loading weights and continuing training...")
+        model.module.load_state_dict(torch.load(model_path, map_location=device))
+    else:
+        print("🚀 No existing model found. Starting training from scratch...")
+
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-    trained_model = train_model(model, loader, optimizer, device, max_epoch=100000)
+    trained_state_dict = train_model(model, loader, optimizer, device, max_epoch=100000)
+    model.module.load_state_dict(trained_state_dict)
 
-    torch.save(trained_model, "preys_vs_hunters.pt")
-    print("✅ Model saved as preys_vs_hunters.pt")
+    torch.save(model.module.state_dict(), model_path)
+    print(f"✅ Model saved to {model_path}")
