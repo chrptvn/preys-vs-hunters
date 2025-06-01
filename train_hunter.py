@@ -141,7 +141,9 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     dataset = PreyVsHunterDataset(num_samples=200)
-    loader = DataLoader(dataset, batch_size=1, shuffle=True)
+    num_gpus = torch.cuda.device_count()
+    batch_size = max(4, num_gpus * 2)
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
 
     model = HunterModel().to(device)
     model = nn.DataParallel(model)
