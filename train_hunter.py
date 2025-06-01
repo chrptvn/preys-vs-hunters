@@ -1,3 +1,5 @@
+import os
+
 from ai.models import ActionType
 from ai.tensor.DataBuilder import Entity, DataBuilder
 import torch
@@ -92,7 +94,7 @@ class HunterModel(nn.Module):
         )
 
 # --- TRAINING LOOP ---
-def train_model(model, dataloader, optimizer, device, max_epoch=100000):
+def train_model(model, dataloader, optimizer, device, max_epoch=1000):
     model.train()
     loss_action_fn = nn.CrossEntropyLoss()
     loss_goal_fn = nn.CrossEntropyLoss()
@@ -128,7 +130,9 @@ def train_model(model, dataloader, optimizer, device, max_epoch=100000):
         print(f"[Epoch {epoch+1}] Loss: {loss:.4f}")
 
         if epoch == max_epoch or loss < 0.01:
-            return model.module.state_dict()
+            break
+
+    return model
 
 
 
@@ -152,8 +156,7 @@ if __name__ == "__main__":
 
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-3)
 
-    trained_state_dict = train_model(model, loader, optimizer, device, max_epoch=100000)
-    model.module.load_state_dict(trained_state_dict)
+    trained_model = train_model(model, loader, optimizer, device, max_epoch=1000)
 
-    torch.save(model.module.state_dict(), model_path)
+    torch.save(trained_model.module.state_dict(), model_path)
     print(f"✅ Model saved to {model_path}")
