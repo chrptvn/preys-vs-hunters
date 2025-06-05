@@ -1,23 +1,8 @@
 from enum import Enum
 from typing import Optional
 
-from preys_vs_hunters.goal.Goal import Goal, GoalType
+from ai.brain import EntityType, Movement
 
-
-class Movement(Enum):
-    UP = 0
-    UPPER_RIGHT = 1
-    RIGHT = 2
-    LOWER_RIGHT = 3
-    DOWN = 4
-    LOWER_LEFT = 5
-    LEFT = 6
-    UPPER_LEFT = 7
-
-class EntityType(Enum):
-    PREDATOR = 0
-    PREY = 1
-    WALL = 2
 
 class Entity:
     def __init__(self,
@@ -38,29 +23,36 @@ class Entity:
             self.eats = eats
         self.color = color
         self.target: Optional[Entity] = None
-        self.goal = Goal(GoalType.STAY)
 
     def move_to(self, x: int, y: int):
         self.location = (x, y)
 
-    def move(self, movement: Movement):
+    def move(self, movement: Movement, size: tuple[int, int]):
         x, y = self.location
-        if movement == Movement.UP:
-            self.move_to(x, y - 1)
-        elif movement == Movement.UPPER_RIGHT:
-            self.move_to(x + 1, y - 1)
-        elif movement == Movement.RIGHT:
-            self.move_to(x + 1, y)
-        elif movement == Movement.LOWER_RIGHT:
-            self.move_to(x + 1, y + 1)
-        elif movement == Movement.DOWN:
-            self.move_to(x, y + 1)
-        elif movement == Movement.LOWER_LEFT:
-            self.move_to(x - 1, y + 1)
-        elif movement == Movement.LEFT:
-            self.move_to(x - 1, y)
-        elif movement == Movement.UPPER_LEFT:
-            self.move_to(x - 1, y - 1)
+        max_x, max_y = size
 
-    def set_goal(self, goal: Goal):
-        self.goal = goal
+        if movement == Movement.UP:
+            x_new, y_new = x, y - 1
+        elif movement == Movement.UPPER_RIGHT:
+            x_new, y_new = x + 1, y - 1
+        elif movement == Movement.RIGHT:
+            x_new, y_new = x + 1, y
+        elif movement == Movement.LOWER_RIGHT:
+            x_new, y_new = x + 1, y + 1
+        elif movement == Movement.DOWN:
+            x_new, y_new = x, y + 1
+        elif movement == Movement.LOWER_LEFT:
+            x_new, y_new = x - 1, y + 1
+        elif movement == Movement.LEFT:
+            x_new, y_new = x - 1, y
+        elif movement == Movement.UPPER_LEFT:
+            x_new, y_new = x - 1, y - 1
+        else:
+            x_new, y_new = x, y  # No movement
+
+        # Apply toroidal wrapping
+        x_new %= max_x
+        y_new %= max_y
+
+        self.move_to(x_new, y_new)
+

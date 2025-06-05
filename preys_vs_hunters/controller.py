@@ -6,12 +6,14 @@ from matplotlib import pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.widgets import Button
 
-from ai.brain import decide_movement
-from ai.models import HunterModel
+import torch
+from torch_geometric.data import Data
+
+from ai.model import SwarmBrain
 from preys_vs_hunters.display import GridDisplay
 from preys_vs_hunters.entities.entity import EntityType, Movement, Entity
 from preys_vs_hunters.entities.pool import Pool
-from preys_vs_hunters.utils import get_local_observation, get_entities_at_location
+from preys_vs_hunters.utils import get_entities_at_location
 
 
 class ActionType(Enum):
@@ -21,7 +23,7 @@ class ActionType(Enum):
 
 
 class PreysVsHunters:
-    def __init__(self, hunter_model: HunterModel, device, size=(100, 100), interval=200):
+    def __init__(self, model: SwarmBrain, device, size=(100, 100), interval=200):
         self.is_running = False
         self.spawn_type = None
         self.action = ActionType.WATCH
@@ -42,11 +44,45 @@ class PreysVsHunters:
         self._setup_ui()
 
         self.device = device
-        self.hunter_model = hunter_model
+        self.model = model.to(self.device)
+        self.model.eval()
+        self.size = size
+
+    def build_graph_for_entity(self, observer: Entity, all_entities: List[Entity]):
+        ox, oy = observer.location
+        rows = []
+        edges = []
+        entities = []
+
+        for e in all_entities:
+            if e.id == observer.id:
+                continue
+            ex, ey = e.location
+            dx, dy = (ex - ox) / self.grid.shape[0], (ey - oy) / self.grid.shape[1]
+            e_type = e.type.value if hasattr(e.type, 'value') else e.type
+            rows.append([e_type, dx, dy])
+            entities.append((e_type, dx, dy))
+
+        observer_type = observer.type.value if hasattr(observer.type, 'value') else observer.type
+        rows.append([observer_type, 0.0, 0.0])
+        observer_idx = len(rows) - 1
+        num_nodes = len(rows)
+
+        for i in range(num_nodes - 1):
+            edges.append([i, observer_idx])
+            edges.append([observer_idx, i])
+        for i in range(num_nodes):
+            edges.append([i, i])
+
+        edge_index = torch.tensor(edges, dtype=torch.long).t().contiguous()
+        x = torch.tensor(rows, dtype=torch.float32)
+
+        return Data(x=x, edge_index=edge_index)
 
     def _spawn(self, entity_type: EntityType, location: tuple[int, int]):
+        x, y = location
         self.entities_pool.add(entity_type, location)
-        self.grid[location] = self.display.get_color_index(self.entities_pool.entities[-1].color)
+        self.grid[y, x] = self.display.get_color_index(self.entities_pool.entities[-1].color)
 
     def _remove(self, entity_id: int):
         entity = next((e for e in self.entities_pool.entities if e.id == entity_id), None)
@@ -54,55 +90,17 @@ class PreysVsHunters:
             self.grid[entity.location] = 0
             self.entities_pool.remove(entity_id)
 
-    def _move_to(self, entity: Entity, movement: Movement):
-        # Clear the old location on the grid
-        self.grid[entity.location] = 0
-        # Get the new location
-        new_location = self._get_new_location(entity, movement)
-
-        # Update the entity’s internal location
-        entity.location = new_location
-
-        # Paint the new location on the grid
-        self.grid[new_location] = self.display.get_color_index(entity.color)
-
-    def _get_new_location(self, entity: Entity, movement: Movement):
-        direction = (0, 0)
-        if movement is Movement.UP:
-            direction = (-1, 0)
-        elif movement is Movement.DOWN:
-            direction = (1, 0)
-        elif movement is Movement.LEFT:
-            direction = (0, -1)
-        elif movement is Movement.RIGHT:
-            direction = (0, 1)
-        elif movement is Movement.UPPER_LEFT:
-            direction = (-1, -1)
-        elif movement is Movement.UPPER_RIGHT:
-            direction = (-1, 1)
-        elif movement is Movement.LOWER_LEFT:
-            direction = (1, -1)
-        elif movement is Movement.LOWER_RIGHT:
-            direction = (1, 1)
-
-        # Compute new location with toroidal wrapping
-        x_max, y_max = self.grid.shape
-        dx, dy = direction
-        new_x = (entity.location[0] + dx) % x_max
-        new_y = (entity.location[1] + dy) % y_max
-        return (new_x, new_y)
-
     def _run(self):
         plt.show()
 
     def _on_click(self, event):
         if event.inaxes != self.ax or event.xdata is None or event.ydata is None:
             return
-        x = int(event.ydata)
-        y = int(event.xdata)
+        x = int(event.xdata)
+        y = int(event.ydata)
 
         entities = get_entities_at_location((x, y), self.entities_pool.entities)
-        if self.action is ActionType.SPAWN and not entities and self.spawn_type:
+        if self.action is ActionType.SPAWN and not entities and self.spawn_type is not None:
             self._spawn(self.spawn_type, (x, y))
             print(f"Spawned {self.spawn_type} at ({x}, {y})")
         elif self.action is ActionType.DELETE:
@@ -122,7 +120,7 @@ class PreysVsHunters:
 
         ax_button_hunter = plt.axes((0.56, 0.01, 0.1, 0.05))
         self.button_hunter = Button(ax_button_hunter, 'Hunter')
-        self.button_hunter.on_clicked(lambda event: self._set_spawn_type(EntityType.PREDATOR))
+        self.button_hunter.on_clicked(lambda event: self._set_spawn_type(EntityType.HUNTER))
 
         ax_button_prey = plt.axes((0.44, 0.01, 0.1, 0.05))
         self.button_prey = Button(ax_button_prey, 'Prey')
@@ -162,10 +160,10 @@ class PreysVsHunters:
             self.spawn_type = None
 
     def _is_blocked(self, entityType: EntityType, entities_at_location: List[Entity]):
-        if entityType is EntityType.PREDATOR:
+        if entityType is EntityType.HUNTER:
             for entity in entities_at_location:
                 print(f"Entity {entity.id} blocked by {entity.type} at {entity.location}")
-                if entity.type is EntityType.WALL or entity.type is EntityType.PREDATOR:
+                if entity.type is EntityType.WALL or entity.type is EntityType.HUNTER:
                     return True
                 elif entity.type is EntityType.PREY:
                     return False
@@ -174,26 +172,16 @@ class PreysVsHunters:
 
     def _update(self, _):
         if self.is_running:
-
             for entity in self.entities_pool.entities:
-                new_location = entity.location
-                best_move = None
-
-                if entity.type is EntityType.PREDATOR:
-                    local_observation = get_local_observation(entity.location, self.grid, self.entities_pool.entities)
-                    best_move = decide_movement(entity.id, local_observation, self.hunter_model, self.device)
-
-                    new_location = self._get_new_location(entity, best_move)
-
-                    entities_at_new_location = get_entities_at_location(new_location, self.entities_pool.entities)
-
-                    if not self._is_blocked(entity.type, entities_at_new_location):
-                        self._move_to(entity, best_move)
-                        for entity_at_new_location in entities_at_new_location:
-                            self.entities_pool.entities.remove(entity_at_new_location)
-
-                elif entity.type is EntityType.PREY:
-                    pass
-
+                x, y = entity.location
+                self.grid[y, x] = 0
+                g = self.build_graph_for_entity(entity, self.entities_pool.entities).to(self.device)
+                with torch.no_grad():
+                    _, _, action_logits = self.model(g)
+                action_idx = action_logits.argmax().item()
+                movement = list(Movement)[action_idx % len(Movement)]
+                entity.move(movement, self.size)
+                x, y = entity.location
+                self.grid[y, x] = self.display.get_color_index(entity.color)
 
         return self.display.update(self.grid)
