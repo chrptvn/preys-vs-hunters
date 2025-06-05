@@ -1,5 +1,4 @@
-from enum import Enum
-from typing import Optional
+from typing import Optional, List
 
 from ai.brain import EntityType, Movement
 
@@ -27,7 +26,7 @@ class Entity:
     def move_to(self, x: int, y: int):
         self.location = (x, y)
 
-    def move(self, movement: Movement, size: tuple[int, int]):
+    def move(self, movement: Movement, size: tuple[int, int], entities: []):
         x, y = self.location
         max_x, max_y = size
 
@@ -53,6 +52,12 @@ class Entity:
         # Apply toroidal wrapping
         x_new %= max_x
         y_new %= max_y
+
+        if entities:
+            # Check for collisions with other entities
+            for entity in entities:
+                if entity.id != self.id and entity.location == (x_new, y_new):
+                    return
 
         self.move_to(x_new, y_new)
 

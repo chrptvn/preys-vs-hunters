@@ -159,17 +159,6 @@ class PreysVsHunters:
         elif action_type == ActionType.WATCH:
             self.spawn_type = None
 
-    def _is_blocked(self, entityType: EntityType, entities_at_location: List[Entity]):
-        if entityType is EntityType.HUNTER:
-            for entity in entities_at_location:
-                print(f"Entity {entity.id} blocked by {entity.type} at {entity.location}")
-                if entity.type is EntityType.WALL or entity.type is EntityType.HUNTER:
-                    return True
-                elif entity.type is EntityType.PREY:
-                    return False
-
-        return False
-
     def _update(self, _):
         if self.is_running:
             for entity in self.entities_pool.entities:
@@ -180,7 +169,7 @@ class PreysVsHunters:
                     _, _, action_logits = self.model(g)
                 action_idx = action_logits.argmax().item()
                 movement = list(Movement)[action_idx % len(Movement)]
-                entity.move(movement, self.size)
+                entity.move(movement, self.size, self.entities_pool.entities)
                 x, y = entity.location
                 self.grid[y, x] = self.display.get_color_index(entity.color)
 
