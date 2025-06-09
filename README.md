@@ -12,7 +12,6 @@ A grid-based simulation using PyTorch Geometric and Matplotlib where hunters cha
   - Hunters
   - Walls (static obstacles)
 - Training script with curriculum-style entity scaling.
-- Spawn, delete, and observe modes.
 
 ## Requirements
 
