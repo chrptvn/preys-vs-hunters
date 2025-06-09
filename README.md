@@ -38,8 +38,7 @@ preys-vs-hunters/
 │   ├── controller.py        # Simulation logic and GUI
 │   ├── entities/            # Entity types (Hunter, Prey, Wall, etc.)
 │   ├── utils.py             # Utility functions (distance, delta, graph building)
-│   ├── display.py           # Grid display rendering logic
-│   
+│   └── display.py           # Grid display rendering logic
 ├── main.py                  # Entry point to run the simulation
 ├── train.py                 # Training loop for SwarmBrain
 ├── requirements.txt
