@@ -1,4 +1,5 @@
-from preys_vs_hunters.entities.entity import Entity, EntityType
+from simulation.entities.entity import Entity, EntityType
+
 
 class Hunter(Entity):
     def __init__(self, id: int, location: tuple[int, int]=(0, 0)):

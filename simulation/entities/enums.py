@@ -6,6 +6,7 @@ class EntityType(Enum):
     HUNTER = 1
     WALL = 2
 
+
 class Movement(Enum):
     UP = 0
     UPPER_RIGHT = 1
@@ -15,3 +16,4 @@ class Movement(Enum):
     LOWER_LEFT = 5
     LEFT = 6
     UPPER_LEFT = 7
+    STAY = 8

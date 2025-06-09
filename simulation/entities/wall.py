@@ -1,4 +1,4 @@
-from preys_vs_hunters.entities.entity import Entity, EntityType
+from simulation.entities.entity import Entity, EntityType
 
 
 class Wall(Entity):

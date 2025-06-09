@@ -1,140 +1,128 @@
-import torch
 import random
+import torch
 import torch.nn as nn
-from torch_geometric.data import Data
-from ai.brain import Movement, EntityType
+
 from ai.model import SwarmBrain
+from simulation.entities.enums import EntityType, Movement
+from simulation.entities.hunter import Hunter
+from simulation.entities.prey import Prey
+from simulation.utils import (
+    get_nearest_entity,
+    get_relative_distance,
+    get_relative_position,
+    get_action_from_delta,
+    generate_data
+)
 
-# ----------------------------------------------------------------------
-def get_action_from_delta(dx, dy):
-    if dy < 0:
-        if dx > 0:
-            return Movement.UPPER_RIGHT
-        elif dx < 0:
-            return Movement.UPPER_LEFT
+
+def train(epochs: int, n_entities: int):
+    """
+    Train the SwarmBrain model using randomly generated prey/hunter interactions.
+
+    :param epochs: Number of training iterations
+    :param n_entities: Number of target entities to include per sample
+    """
+    # Loss weight multipliers
+    chase_loss_mult = 100.0
+    target_location_loss_mult = 1.0
+    action_loss_mult = 50.0
+
+    for epoch in range(epochs):
+        # Alternate between Hunter and Prey as observer
+        if epoch % 2:
+            observer = Hunter(0, (int(grid_size[0] / 2), int(grid_size[1] / 2)))
         else:
-            return Movement.UP
-    elif dy > 0:
-        if dx > 0:
-            return Movement.LOWER_RIGHT
-        elif dx < 0:
-            return Movement.LOWER_LEFT
-        else:
-            return Movement.DOWN
-    else:
-        return Movement.RIGHT if dx > 0 else Movement.LEFT
+            observer = Prey(0, (int(grid_size[0] / 2), int(grid_size[1] / 2)))
 
-# ----------------------------------------------------------------------
-def sample(n_entities=5):
-    ox, oy = random.randint(0, 10), random.randint(0, 10)
-    rows = []
-    entities = []
+        entities = []
+        distance_targets = []
 
-    observer_type = random.choice([EntityType.PREY, EntityType.HUNTER])
+        # Generate n_entities of the opposite type randomly placed
+        for i in range(n_entities):
+            if observer.type == EntityType.HUNTER:
+                entity = Prey(i, (random.randint(0, grid_size[0] - 1), random.randint(0, grid_size[1] - 1)))
+            else:
+                entity = Hunter(i, (random.randint(0, grid_size[0] - 1), random.randint(0, grid_size[1] - 1)))
 
-    for _ in range(n_entities):
-        ex, ey = random.randint(0, 10), random.randint(0, 10)
-        dx, dy = (ex - ox) / 10, (ey - oy) / 10
-        dist = (dx * dx + dy * dy) ** 0.5
-        e_type = random.choice([EntityType.PREY, EntityType.HUNTER])
-        rows.append([e_type.value, dx, dy])
-        entities.append((e_type, dist, dx, dy))
+            distance_targets.append(get_relative_distance(observer, entity, grid_size))
+            entities.append(entity)
 
-    rows.append([observer_type.value, 0.0, 0.0])
-    observer_idx = n_entities
-    num_nodes = n_entities + 1
+        # Generate input graph and index mapping
+        entities_indexes, data = generate_data(observer, entities, grid_size)
+        data = data.to(device)
 
-    edges = []
-    for i in range(n_entities):
-        edges.append([i, observer_idx])
-        edges.append([observer_idx, i])
-    for i in range(num_nodes):
-        edges.append([i, i])
+        # Determine type of entity to chase
+        target_type = EntityType.PREY if observer.type == EntityType.HUNTER else EntityType.HUNTER
+        nearest_entity = get_nearest_entity(observer, entities, grid_size, target_type)
 
-    edge_index = torch.tensor(edges, dtype=torch.long).t().contiguous()
-    x = torch.tensor(rows, dtype=torch.float32)
+        nearest_entity_position = get_relative_position(observer, nearest_entity, grid_size)
+        action_to_nearest_entity = get_action_from_delta(nearest_entity_position, observer.type == EntityType.PREY)
 
-    if observer_type == EntityType.PREY:
-        hunters = [(i, dist) for i, (t, dist, _, _) in enumerate(entities) if t == EntityType.HUNTER]
-        if not hunters:
-            return None
-        absolute_target = min(hunters, key=lambda x: x[1])[0]
-    else:
-        preys = [(i, dist) for i, (t, dist, _, _) in enumerate(entities) if t == EntityType.PREY]
-        if not preys:
-            return None
-        absolute_target = min(preys, key=lambda x: x[1])[0]
+        # Target tensors for supervision
+        chase_target = torch.tensor(entities_indexes[nearest_entity.id], dtype=torch.long, device=device)
+        distance_targets = torch.tensor(distance_targets, dtype=torch.float32, device=device)
+        target_location_target = torch.tensor(
+            [nearest_entity_position[0], nearest_entity_position[1]],
+            dtype=torch.float32,
+            device=device
+        )
+        action_target = torch.tensor(action_to_nearest_entity.value, dtype=torch.long, device=device)
+
+        # Forward pass
+        distance_score, chase_score, target_location_score, action_legits = model(data)
+
+        # Compute losses
+        distance_loss = mse_loss_fn(distance_score, distance_targets)
+        chase_loss = cross_entropy_loss_fn(chase_score, chase_target)
+        target_location_loss = mse_loss_fn(target_location_score, target_location_target)
+        action_loss = cross_entropy_loss_fn(action_legits, action_target)
+
+        # Combine all loss components
+        total_loss = (
+            distance_loss +
+            chase_loss_mult * chase_loss +
+            target_location_loss_mult * target_location_loss +
+            action_loss_mult * action_loss
+        )
+
+        # Print debug info every 101 epochs
+        if epoch % 101 == 0:
+            print("Target entity:", chase_target.item())
+            print("Predicted entity:", torch.argmax(chase_score).item())
+
+            print("Target distances:   ", distance_targets.squeeze().tolist())
+            print("Predicted distances:", distance_score.squeeze().tolist())
+
+            print("Target relative location:   ", [nearest_entity_position[0], nearest_entity_position[1]])
+            print("Predicted relative location:", target_location_score.tolist())
+
+            print("Target action:", Movement(action_to_nearest_entity.value))
+            print("Predicted action:", Movement(torch.argmax(action_legits).item()))
+
+            print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss.item()}")
+
+        # Backpropagation
+        optimizer.zero_grad()
+        total_loss.backward()
+        optimizer.step()
 
 
-    return Data(x=x, edge_index=edge_index), absolute_target, observer_type, entities
+if __name__ == '__main__':
+    # Setup training environment
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model = SwarmBrain().to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-2)
+    mse_loss_fn = nn.MSELoss()
+    cross_entropy_loss_fn = nn.CrossEntropyLoss()
+    grid_size = (50, 50)
+    epochs = 10000
 
-# ----------------------------------------------------------------------
-device = "cuda" if torch.cuda.is_available() else "cpu"
-model = SwarmBrain().to(device)
-opt = torch.optim.Adam(model.parameters(), lr=1e-2)
-loss_fn = nn.CrossEntropyLoss()
+    # Curriculum training with increasing complexity
+    train(epochs, 1)
+    train(epochs, 2)
+    train(epochs, 3)
+    train(epochs, 5)
+    train(epochs * 5, 8)
 
-action_labels = [
-    "UP", "UPPER_RIGHT", "RIGHT", "LOWER_RIGHT",
-    "DOWN", "LOWER_LEFT", "LEFT", "UPPER_LEFT"
-]
-
-for epoch in range(20000):
-    sample_result = sample()
-    if sample_result is None:
-        continue
-    g, absolute_target, observer_type, entities = sample_result
-    g = g.to(device)
-    entity_types = g.x[:-1, 0]  # exclude observer
-
-    chase_scores, flee_scores, action_logits = model(g)
-    is_flee = observer_type == EntityType.PREY
-
-    target_type = (EntityType.HUNTER if is_flee else EntityType.PREY).value
-    mask = entity_types == target_type
-    if mask.sum().item() == 0:
-        continue
-
-    logits = (flee_scores if is_flee else chase_scores)[:-1][mask]
-    masked_indices = mask.nonzero(as_tuple=True)[0]
-    if absolute_target not in masked_indices:
-        continue
-
-    relative_target = (masked_indices == absolute_target).nonzero(as_tuple=True)[0].item()
-    target = torch.tensor([relative_target], dtype=torch.long, device=device)
-
-    _, _, dx, dy = entities[absolute_target]
-    action = get_action_from_delta(dx, dy)
-    action_target = torch.tensor([action.value], dtype=torch.long, device=device)
-
-    distance_weight = torch.tensor([entities[absolute_target][1]], dtype=torch.float32, device=device)
-    loss_behavior = loss_fn(logits.unsqueeze(0), target) * distance_weight
-    loss_action = loss_fn(action_logits.unsqueeze(0), action_target)
-    total_loss = loss_behavior + loss_action
-
-    opt.zero_grad()
-    total_loss.backward()
-    opt.step()
-
-    if epoch % 1 == 0:
-        pred_idx = logits.argmax().item()
-        pred_absolute = masked_indices[pred_idx].item()
-        pred_type = "PREY" if entities[pred_absolute][0] == EntityType.PREY else "HUNTER"
-        tgt_type = "PREY" if entities[absolute_target][0] == EntityType.PREY else "HUNTER"
-        type_str = "PREY" if observer_type == EntityType.PREY else "HUNTER"
-        behavior = "FLEE" if is_flee else "CHASE"
-
-        n_preys = sum(1 for e, _, _, _ in entities if e == EntityType.PREY)
-        n_hunters = sum(1 for e, _, _, _ in entities if e == EntityType.HUNTER)
-
-        pred_action_idx = action_logits.argmax().item()
-        pred_action_str = action_labels[pred_action_idx]
-        target_action_str = action_labels[action.value]
-
-        print(f"{epoch:4d}  {behavior:5s}  observer={type_str:6s}  loss={total_loss.item():.4f}  "
-              f"pred={pred_absolute} ({pred_type})  tgt={absolute_target} ({tgt_type})  "
-              f"[preys={n_preys} hunters={n_hunters}]  "
-              f"action={pred_action_str} (tgt={target_action_str})")
-
-torch.save(model.state_dict(), "swarmbrain.pt")
-print("Model saved to swarmbrain.pt")
+    # Save trained model
+    torch.save(model.state_dict(), "swarm_brain.pt")
