@@ -201,7 +201,7 @@ class Simulation:
                 # Only consider other types (e.g., prey vs hunter)
                 entities_without_observer = [
                     e for e in self.entities_pool.entities
-                    if e.type != observer.type and e.type != EntityType.WALL
+                    if e.id != observer.id
                 ]
 
                 if not entities_without_observer:

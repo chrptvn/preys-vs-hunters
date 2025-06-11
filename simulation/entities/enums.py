@@ -1,6 +1,12 @@
 from enum import Enum
 
 
+class BehaviorType(Enum):
+    IGNORE = 0
+    CHASE = 1
+    FLEE = 2
+
+
 class EntityType(Enum):
     PREY = 0
     HUNTER = 1

@@ -9,6 +9,7 @@ class Entity:
                  location: tuple[int, int],
                  label: str,
                  eats: [EntityType] = None,
+                 fears: [EntityType] = None,
                  color: str = "black"
                  ):
         self.id = id  # Unique identifier for the entity
@@ -16,6 +17,7 @@ class Entity:
         self.location = location  # (x, y) position on the grid
         self.label = label  # Display label or name
         self.eats = eats if eats is not None else []  # List of EntityTypes this entity can eat
+        self.fears = fears if fears is not None else []  # List of EntityTypes this entity fears
         self.color = color  # Optional display color
         self.target: Optional[Entity] = None  # Optional target entity (e.g., for chasing)
 
