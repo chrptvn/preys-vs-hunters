@@ -24,11 +24,12 @@ def train(epochs: int, target_entities: int, same_type_entities: int=0, walls: i
     :param target_entities: Number of target entities to include per sample
     """
     # Loss weight multipliers
-    nearest_loss_mult = 100.0
+    nearest_loss_mult = 1.0
     behavior_targets_mult = 1.0
     target_location_loss_mult = 1.0
-    action_loss_mult = 50.0
+    action_loss_mult = 1.0
 
+    successes = 0
     for epoch in range(epochs):
         # Alternate between Hunter and Prey as observer
         if epoch % 2:
@@ -110,8 +111,11 @@ def train(epochs: int, target_entities: int, same_type_entities: int=0, walls: i
             action_loss_mult * action_loss
         )
 
+        if Movement(action_to_target.value).value == Movement(torch.argmax(action_logits).item()).value:
+            successes += 1
+
         # Print debug info every 101 epochs
-        if epoch % 101 == 0:
+        if epoch % 100 == 0:
             print("-" * 40)
             print("Target entity:", nearest_target.item())
             print("Predicted entity:", torch.argmax(nearest_scores).item())
@@ -129,6 +133,9 @@ def train(epochs: int, target_entities: int, same_type_entities: int=0, walls: i
             print("Predicted action:", Movement(torch.argmax(action_logits).item()))
 
             print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss.item()}")
+            print(f"Success rate: {successes}%")
+
+            successes = 0
 
         # Backpropagation
         optimizer.zero_grad()
@@ -146,12 +153,7 @@ if __name__ == '__main__':
     grid_size = (50, 50)
     epochs = 10000
 
-    # Curriculum training with increasing complexity
-    train(epochs, 1, 5, 5)
-    train(epochs, 2, 5, 5)
-    train(epochs, 3, 5, 5)
-    train(epochs, 5, 5, 5)
-    train(epochs * 5, 8, 10, 10)
+    train(epochs, 1, 1, 1)
 
     # Save trained model
     torch.save(model.state_dict(), "swarm_brain.pt")
