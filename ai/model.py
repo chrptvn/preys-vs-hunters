@@ -17,8 +17,8 @@ class SwarmBrain(nn.Module):
         # Two additional GCN layers to deepen feature extraction
         self.conv2 = GCNConv(64, 64, add_self_loops=False)
         self.conv3 = GCNConv(64, 64, add_self_loops=False)
-        self.conv4 = GCNConv(64, 64, add_self_loops=False)
-        self.conv5 = GCNConv(64, 64, add_self_loops=False)
+        # self.conv4 = GCNConv(64, 64, add_self_loops=False)
+        # self.conv5 = GCNConv(64, 64, add_self_loops=False)
 
         # Output heads for multi-task predictions:
 
@@ -42,8 +42,8 @@ class SwarmBrain(nn.Module):
         x = F.relu(self.conv1(data.x, data.edge_index))
         x = F.relu(self.conv2(x, data.edge_index))
         x = F.relu(self.conv3(x, data.edge_index))
-        x = F.relu(self.conv4(x, data.edge_index))
-        x = F.relu(self.conv5(x, data.edge_index))
+        # x = F.relu(self.conv4(x, data.edge_index))
+        # x = F.relu(self.conv5(x, data.edge_index))
 
         # Predict distance to target for each node
         distance_scores = self.distance_head(x).squeeze(-1)
