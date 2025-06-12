@@ -6,12 +6,13 @@ from ai.model import SwarmBrain
 from simulation.entities.enums import EntityType, Movement
 from simulation.entities.hunter import Hunter
 from simulation.entities.prey import Prey
+from simulation.entities.wall import Wall
 from simulation.utils import (
     get_nearest_entity,
     get_relative_distance,
     get_relative_position,
     get_action_from_delta,
-    generate_data
+    generate_data, get_normalized_distance
 )
 
 
@@ -23,7 +24,7 @@ def train(epochs: int, n_entities: int):
     :param n_entities: Number of target entities to include per sample
     """
     # Loss weight multipliers
-    chase_loss_mult = 100.0
+    attention_loss_mult = 100.0
     target_location_loss_mult = 1.0
     action_loss_mult = 50.0
 
@@ -39,12 +40,26 @@ def train(epochs: int, n_entities: int):
 
         # Generate n_entities of the opposite type randomly placed
         for i in range(n_entities):
+            entity = Prey(i, (random.randint(0, grid_size[0] - 1), random.randint(0, grid_size[1] - 1)))
             if observer.type == EntityType.HUNTER:
-                entity = Prey(i, (random.randint(0, grid_size[0] - 1), random.randint(0, grid_size[1] - 1)))
+                relative_distance = get_relative_distance(observer, entity, grid_size)
+                normalized_distance = get_normalized_distance(relative_distance, grid_size)
+                distance_targets.append(normalized_distance)
             else:
-                entity = Hunter(i, (random.randint(0, grid_size[0] - 1), random.randint(0, grid_size[1] - 1)))
+                distance_targets.append(1.0)
+            entities.append(entity)
 
-            distance_targets.append(get_relative_distance(observer, entity, grid_size))
+            entity = Hunter(i, (random.randint(0, grid_size[0] - 1), random.randint(0, grid_size[1] - 1)))
+            if observer.type == EntityType.PREY:
+                relative_distance = get_relative_distance(observer, entity, grid_size)
+                normalized_distance = get_normalized_distance(relative_distance, grid_size)
+                distance_targets.append(normalized_distance)
+            else:
+                distance_targets.append(1.0)
+            entities.append(entity)
+
+            entity = Wall(i, (random.randint(0, grid_size[0] - 1), random.randint(0, grid_size[1] - 1)))
+            distance_targets.append(1.0)
             entities.append(entity)
 
         # Generate input graph and index mapping
@@ -59,7 +74,7 @@ def train(epochs: int, n_entities: int):
         action_to_nearest_entity = get_action_from_delta(nearest_entity_position, observer.type == EntityType.PREY)
 
         # Target tensors for supervision
-        chase_target = torch.tensor(entities_indexes[nearest_entity.id], dtype=torch.long, device=device)
+        attention_targets = torch.tensor(entities_indexes[nearest_entity.id], dtype=torch.long, device=device)
         distance_targets = torch.tensor(distance_targets, dtype=torch.float32, device=device)
         target_location_target = torch.tensor(
             [nearest_entity_position[0], nearest_entity_position[1]],
@@ -69,35 +84,35 @@ def train(epochs: int, n_entities: int):
         action_target = torch.tensor(action_to_nearest_entity.value, dtype=torch.long, device=device)
 
         # Forward pass
-        distance_score, chase_score, target_location_score, action_legits = model(data)
+        distance_scores, attention_scores, target_location_score, action_logits = model(data)
 
         # Compute losses
-        distance_loss = mse_loss_fn(distance_score, distance_targets)
-        chase_loss = cross_entropy_loss_fn(chase_score, chase_target)
+        distance_loss = mse_loss_fn(distance_scores, distance_targets)
+        attention_loss = cross_entropy_loss_fn(attention_scores, attention_targets)
         target_location_loss = mse_loss_fn(target_location_score, target_location_target)
-        action_loss = cross_entropy_loss_fn(action_legits, action_target)
+        action_loss = cross_entropy_loss_fn(action_logits, action_target)
 
         # Combine all loss components
         total_loss = (
             distance_loss +
-            chase_loss_mult * chase_loss +
+            attention_loss_mult * attention_loss +
             target_location_loss_mult * target_location_loss +
             action_loss_mult * action_loss
         )
 
         # Print debug info every 101 epochs
-        if epoch % 101 == 0:
-            print("Target entity:", chase_target.item())
-            print("Predicted entity:", torch.argmax(chase_score).item())
+        if epoch % 100 == 0:
+            print("Target entity:", attention_targets.item())
+            print("Predicted entity:", torch.argmax(attention_scores).item())
 
             print("Target distances:   ", distance_targets.squeeze().tolist())
-            print("Predicted distances:", distance_score.squeeze().tolist())
+            print("Predicted distances:", distance_scores.squeeze().tolist())
 
             print("Target relative location:   ", [nearest_entity_position[0], nearest_entity_position[1]])
             print("Predicted relative location:", target_location_score.tolist())
 
             print("Target action:", Movement(action_to_nearest_entity.value))
-            print("Predicted action:", Movement(torch.argmax(action_legits).item()))
+            print("Predicted action:", Movement(torch.argmax(action_logits).item()))
 
             print(f"Epoch {epoch + 1}/{epochs}, Loss: {total_loss.item()}")
 
@@ -115,7 +130,7 @@ if __name__ == '__main__':
     mse_loss_fn = nn.MSELoss()
     cross_entropy_loss_fn = nn.CrossEntropyLoss()
     grid_size = (50, 50)
-    epochs = 10000
+    epochs = 50000
 
     # Curriculum training with increasing complexity
     train(epochs, 1)

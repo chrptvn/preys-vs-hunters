@@ -198,20 +198,11 @@ class Simulation:
                 if observer.type == EntityType.WALL:
                     continue
 
-                # Only consider other types (e.g., prey vs hunter)
-                entities_without_observer = [
-                    e for e in self.entities_pool.entities
-                    if e.type != observer.type and e.type != EntityType.WALL
-                ]
-
-                if not entities_without_observer:
-                    continue
-
                 x, y = observer.location
                 self.grid[y, x] = 0
 
                 # Generate GNN input and get model prediction
-                _, g = generate_data(observer, entities_without_observer, self.grid_size)
+                _, g = generate_data(observer, self.entities_pool.entities, self.grid_size)
                 _, _, _, action_logits = self.model(g)
 
                 movement = Movement(torch.argmax(action_logits).item())

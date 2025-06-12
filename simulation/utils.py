@@ -81,6 +81,19 @@ def get_relative_position(observer: Entity, entity: Entity, grid_size: tuple[int
     return dx, dy
 
 
+def get_normalized_position(observer: Entity, entity: Entity, grid_size: tuple[int, int]):
+    """
+    Compute the normalized toroidal relative (dx, dy) from observer to another entity.
+
+    :param observer: The entity doing the observing
+    :param entity: The other entity
+    :param grid_size: (width, height) of the grid
+    :return: Tuple of (normalized dx, normalized dy)
+    """
+    dx, dy = get_relative_position(observer, entity, grid_size)
+    return dx / grid_size[0], dy / grid_size[1]
+
+
 def get_relative_distance(observer: Entity, entity: Entity, grid_size: tuple[int, int]):
     """
     Compute the Euclidean distance from observer to entity using toroidal coordinates.
@@ -92,6 +105,16 @@ def get_relative_distance(observer: Entity, entity: Entity, grid_size: tuple[int
     """
     dx, dy = get_relative_position(observer, entity, grid_size)
     return (dx ** 2 + dy ** 2) ** 0.5
+
+def get_normalized_distance(distance: float, grid_size: tuple[int, int]):
+    """
+    Normalize the distance to a range of [0, 1] based on the maximum possible distance in the grid.
+    :param distance:
+    :param grid_size:
+    :return:
+    """
+    max_possible_distance = ((grid_size[0] / 2) ** 2 + (grid_size[1] / 2) ** 2) ** 0.5
+    return distance / max_possible_distance if max_possible_distance > 0 else 0.0
 
 
 def get_nearest_entity(observer: Entity, entities: list[Entity], grid_size: tuple[int, int], entity_type: EntityType):
