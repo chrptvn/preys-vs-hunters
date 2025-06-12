@@ -12,25 +12,25 @@ class SwarmBrain(nn.Module):
         # Channel 2: entity type (e.g., hunter, prey, wall, etc.)
         # Channel 3: normalized distance in x-direction
         # Channel 4: normalized distance in y-direction
-        self.conv1 = GCNConv(5, 64, add_self_loops=False)
+        self.conv1 = GCNConv(5, 32, add_self_loops=False)
 
         # Two additional GCN layers to deepen feature extraction
-        self.conv2 = GCNConv(64, 64, add_self_loops=False)
-        self.conv3 = GCNConv(64, 64, add_self_loops=False)
+        self.conv2 = GCNConv(32, 32, add_self_loops=False)
+        self.conv3 = GCNConv(32, 32, add_self_loops=False)
 
         # Output heads for multi-task predictions:
 
         # Predicts distance to the nearest target (scalar per node)
-        self.distance_head = nn.Linear(64, 1)
+        self.distance_head = nn.Linear(32, 1)
 
         # Predicts how much each node attention the observer should pay to it
-        self.attention_head = nn.Linear(64, 1)
+        self.attention_head = nn.Linear(32, 1)
 
         # Predicts the (x, y) location of the best target to chase
-        self.target_location_head = nn.Linear(64, 2)
+        self.target_location_head = nn.Linear(32, 2)
 
         # Predicts movement logits: 8 directions + 1 for "stay"
-        self.action_head = nn.Linear(64, 9)
+        self.action_head = nn.Linear(32, 9)
 
         # Dropout layer to prevent overfitting
         self.dropout = nn.Dropout(0.2)
