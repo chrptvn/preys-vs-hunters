@@ -39,8 +39,9 @@ def train(epochs: int, n_entities: int):
         distance_targets = []
 
         # Generate n_entities of the opposite type randomly placed
+        entity_id = 0
         for i in range(n_entities):
-            entity = Prey(i, (random.randint(0, grid_size[0] - 1), random.randint(0, grid_size[1] - 1)))
+            entity = Prey(entity_id, (random.randint(0, grid_size[0] - 1), random.randint(0, grid_size[1] - 1)))
             if observer.type == EntityType.HUNTER:
                 relative_distance = get_relative_distance(observer, entity, grid_size)
                 normalized_distance = get_normalized_distance(relative_distance, grid_size)
@@ -48,8 +49,9 @@ def train(epochs: int, n_entities: int):
             else:
                 distance_targets.append(1.0)
             entities.append(entity)
+            entity_id = entity_id + 1
 
-            entity = Hunter(i, (random.randint(0, grid_size[0] - 1), random.randint(0, grid_size[1] - 1)))
+            entity = Hunter(entity_id, (random.randint(0, grid_size[0] - 1), random.randint(0, grid_size[1] - 1)))
             if observer.type == EntityType.PREY:
                 relative_distance = get_relative_distance(observer, entity, grid_size)
                 normalized_distance = get_normalized_distance(relative_distance, grid_size)
@@ -57,10 +59,12 @@ def train(epochs: int, n_entities: int):
             else:
                 distance_targets.append(1.0)
             entities.append(entity)
+            entity_id = entity_id + 1
 
-            entity = Wall(i, (random.randint(0, grid_size[0] - 1), random.randint(0, grid_size[1] - 1)))
+            entity = Wall(entity_id, (random.randint(0, grid_size[0] - 1), random.randint(0, grid_size[1] - 1)))
             distance_targets.append(1.0)
             entities.append(entity)
+            entity_id = entity_id + 1
 
         # Generate input graph and index mapping
         entities_indexes, data = generate_data(observer, entities, grid_size)
@@ -87,8 +91,9 @@ def train(epochs: int, n_entities: int):
         distance_scores, attention_scores, target_location_score, action_logits = model(data)
 
         # Compute losses
-        distance_loss = mse_loss_fn(distance_scores, distance_targets)
-        attention_loss = cross_entropy_loss_fn(attention_scores, attention_targets)
+        mask = (data.x[:, 2] != observer.type) & (data.x[:, 2] != EntityType.WALL)
+        distance_loss = mse_loss_fn(distance_scores[mask], distance_targets[mask])
+        attention_loss = cross_entropy_loss_fn(attention_scores.unsqueeze(0), attention_targets.unsqueeze(0))
         target_location_loss = mse_loss_fn(target_location_score, target_location_target)
         action_loss = cross_entropy_loss_fn(action_logits, action_target)
 
@@ -130,7 +135,7 @@ if __name__ == '__main__':
     mse_loss_fn = nn.MSELoss()
     cross_entropy_loss_fn = nn.CrossEntropyLoss()
     grid_size = (50, 50)
-    epochs = 50000
+    epochs = 20000
 
     # Curriculum training with increasing complexity
     train(epochs, 1)
